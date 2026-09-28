@@ -198,9 +198,16 @@ def opencode(home, bin_path, remove=False):
     source = PACKAGE / "agents/opencode.js"
     text = f"// installed by herdr-codexbar; `herdr-codexbar uninstall` removes it\nimport {{ create }} from {json.dumps(source.as_uri())};\n\nexport default create({json.dumps(bin_path)});\n"
 
+    # OpenCode 2.0.22 skips "./name" entries in cli.json (they don't resolve against
+    # the config directory), so declare the plugin by absolute path.
+    entry = {"package": str(directory / MARKER)}
+
+    def ours(plugin):
+        return plugin == f"./{MARKER}" or (isinstance(plugin, dict) and plugin.get("package") == entry["package"])
+
     def mutate(settings):
-        plugins = [plugin for plugin in settings.get("plugins", []) if plugin != f"./{MARKER}"]
-        settings["plugins"] = plugins if remove else [*plugins, f"./{MARKER}"]
+        plugins = [plugin for plugin in settings.get("plugins", []) if not ours(plugin)]
+        settings["plugins"] = plugins if remove else [*plugins, entry]
         if remove and not plugins:
             settings.pop("plugins")
     old = shim.read_text() if shim.is_file() else None
