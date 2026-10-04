@@ -44,7 +44,10 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(sorted(hooks), ["PostCompact", "PostToolUse", "SessionStart", "Stop"])
         self.assertEqual(hooks["Stop"][0]["hooks"][0]["command"], "notify")
         self.assertEqual(hooks["SessionStart"][0]["matcher"], "startup|resume|clear|compact")
-        self.assertEqual(self.read(".config/opencode/cli.json")["plugins"], ["./herdr-opencode", "./herdr-codexbar"])
+        self.assertEqual(
+            self.read(".config/opencode/cli.json")["plugins"],
+            ["./herdr-opencode", {"package": str(self.home / ".config/opencode/herdr-codexbar")}],
+        )
         shim = (self.home / ".config/opencode/herdr-codexbar/tui.js").read_text()
         self.assertIn('create("/opt/homebrew/bin/herdr-codexbar")', shim)
         self.assertIn('/herdr_codexbar/agents/opencode.js', shim)
@@ -106,3 +109,19 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OpenCodeLegacyEntry(unittest.TestCase):
+    def test_replaces_relative_entry_with_absolute_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".config/opencode").mkdir(parents=True)
+            (home / ".config/opencode/cli.json").write_text(json.dumps({"plugins": ["./herdr-opencode", "./herdr-codexbar"]}))
+            backups = mock.patch.object(install, "BACKUPS", home / "backups")
+            backups.start()
+            self.addCleanup(backups.stop)
+            install.write(install.opencode(home, BIN), home)
+            plugins = json.loads((home / ".config/opencode/cli.json").read_text())["plugins"]
+            self.assertEqual(plugins, ["./herdr-opencode", {"package": str(home / ".config/opencode/herdr-codexbar")}])
+            install.write(install.opencode(home, BIN, remove=True), home)
+            self.assertEqual(json.loads((home / ".config/opencode/cli.json").read_text())["plugins"], ["./herdr-opencode"])
